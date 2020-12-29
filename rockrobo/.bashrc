@@ -1,0 +1,4 @@
+export CVAT_SERVERLESS=1
+export CVAT_ANALYTICS=1
+export ALLOWED_HOSTS='*'
+

@@ -1,0 +1,105 @@
+docker-compose down
+docker-compose -f docker-compose.yml -f components/analytics/docker-compose.analytics.yml -f components/serverless/docker-compose.serverless.yml build
+docker-compose -f docker-compose.yml -f components/analytics/docker-compose.analytics.yml -f components/serverless/docker-compose.serverless.yml up -d
+
+nuctl deploy --project-name cvat \
+    --path serverless/openvino/omz/public/yolo-v3-tf/nuclio \
+    --volume `pwd`/serverless/openvino/common:/opt/nuclio/common \
+    --platform local
+
+nuctl deploy --project-name cvat \
+    --path serverless/openvino/omz/public/faster_rcnn_inception_v2_coco/nuclio \
+    --volume `pwd`/serverless/openvino/common:/opt/nuclio/common \
+    --platform local
+
+nuctl deploy --project-name cvat \
+    --path serverless/tensorflow/faster_rcnn_inception_v2_coco/nuclio \
+    --volume `pwd`/serverless/openvino/common:/opt/nuclio/common \
+    --platform local
+
+nuctl deploy --project-name cvat \
+    --path serverless/pytorch/foolwood/siammask/nuclio \
+    --volume `pwd`/serverless/openvino/common:/opt/nuclio/common \
+    --platform local
+
+########## list all tasks ##########
+python3 ../utils/cli/cli.py \
+--auth admin:admin \
+--server-host 192.168.50.153 \
+--server-port 8080 \
+ls
+
+########## delete tasks #############
+python3 ../utils/cli/cli.py \
+--auth admin:admin \
+--server-host 192.168.50.153 \
+--server-port 8080 \
+delete 12
+
+############ create tasks #############
+python3 ../utils/cli/cli.py \
+--auth admin:admin \
+--server-host 192.168.50.153 \
+--server-port 8080 \
+create "20201001_R0401S00900297" \
+--labels ./labels.json \
+--overlap 0 \
+--segment_size 100 \
+share data_pipeline/20201001_R0401S00900297/StereoVision_E_L_12271814_47_0_0_178_0_1_85.jpeg \
+data_pipeline/20201001_R0401S00900297/StereoVision_E_L_12273814_-48_0_0_208_9_237_67.jpeg
+
+psql -h 0.0.0.0 -p 15432 -U root -d cvat
+
+create view engine_image_v as
+select
+i.*
+, t.id as task_id
+, s.id as segment_id
+, s.start_frame
+, s.stop_frame
+, j.id as job_id
+from engine_image i
+inner join engine_data d
+on i.data_id = d.id
+inner join engine_task t
+on d.id = t.data_id
+inner join engine_segment s
+on t.id = s.task_id
+and i.frame between s.start_frame and s.stop_frame
+inner join engine_job j
+on s.id = j.segment_id
+;
+
+select '/home/jiangrong/dev/cvat/assets/cvat_data/data/' || data_id || '/raw/' || path
+from
+(select
+l.*
+,label.name as label_name
+,i.task_id
+,i.path
+,i.data_id
+from engine_labeledimage l
+inner join engine_label label
+on l.label_id = label.id
+and label.name in ('pick')
+inner join engine_image_v as i
+on l.frame = i.frame
+and l.job_id = i.job_id
+and i.task_id in (29,33)) as tmp
+;
+
+
+
+
+
+python3 ./cli-rockrobo/cli.py \
+--auth admin:rockrobo123 \
+--server-host 192.168.50.153 \
+--server-port 8080 \
+create test \
+--labels ./cli-rockrobo/baiguang-labels.json \
+--overlap 0 \
+--segment_size 200 \
+--assignee_id 6 \
+--lambda_setting ./cli-rockrobo/lambda.json \
+local ./test_data
